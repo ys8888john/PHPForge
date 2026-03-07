@@ -1,9 +1,14 @@
 #ifndef LEXER_H
 #define LEXER_H
+
+#include <vector>
+#include "tokenType.h"
+#include "token.h"
+
 namespace PHPForge {
 class Lexer {
 public:
-    explicit Lexer(const std::string& source);
+    explicit Lexer(const std::vector<char>& source);
 
     // code to token
     std::vector<Token> tokenize();
@@ -16,7 +21,7 @@ private:
     // auxiliary method
     Token readToken();
     Token readWhitespace();
-    Token readComment();
+    Token readLineComment();
     Token readNumber();
     Token readString();
     Token readIdentifierOrKeyword();
@@ -46,19 +51,18 @@ private:
     // 检查字符是否是十六进制数字（0-9、A-F、a-f）
     bool isHexDigit(char c) const;
 
+    // 创建token
+    Token makeToken(TokenType type, const std::string& value);
+    Token makeToken(TokenType type, char value);
+
 private:
-    std::string source;
+    std::vector<char> source;
     size_t sourceLength;
     size_t currentPos = 0;
     int currentLine = 0;
     int currentColumn = 1;
+}; 
 
-    struct State {
-        size_t pos;
-        int line;
-        int column;
-    };
-    State savedSate;
-};
-}
-#endif
+} // namespace PHPForge
+
+#endif // LEXER_H

@@ -1,12 +1,12 @@
 #ifndef TOKEN_H
 #define TOKEN_H
 
-#include "TokenType.hpp"
+#include "tokenType.h"
 
 namespace PHPForge {
 class Token {
 public:
-    Token(TokenType type, const std::string& value, int line, int column, int position) :
+    Token(TokenType type, const std::string& value, int line, int column, int position)
         : type(type), value(value), line(line), column(column), position(position) {}
     
     TokenType getType() const { return type; }
@@ -21,11 +21,11 @@ public:
     }
 
     bool isKeyword() const {
-        return isKeyword(value);
+        return ::PHPForge::isKeyword(value);
     }
 
     bool isOperator() const {
-        return isOperator(type);
+        return ::PHPForge::isOperator(type);
     }
     
 private:
@@ -34,6 +34,8 @@ private:
     int line;
     int column;
     int position;
-}
-}
-#endif
+};
+
+} // namespace PHPForge
+
+#endif  // TOKEN_H
