@@ -13,6 +13,8 @@ public:
     // code to token
     std::vector<Token> tokenize();
 
+    void dump(const std::vector<Token> &tokens) const;
+
     int getCurrentLine() const { return currentLine; }
     int getCurrentColumn() const { return currentColumn; }
     int getCurrentPosition() const { return currentPos; }

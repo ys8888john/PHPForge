@@ -40,24 +40,7 @@ int main(int argc, char** argv){
     try { 
         PHPForge::Lexer lexer(buffer); 
         auto tokens = lexer.tokenize();
-
-        // 输出所有token
-        size_t meaningful_tokens = 0, token_count = 0;
-        for (const auto& token : tokens) {
-            // 跳过空白、注释和EOF
-            if (token.is(PHPForge::TokenType::T_WHITESPACE) || token.is(PHPForge::TokenType::T_EOF)) {
-                continue;
-            }
-
-            std::cout << "token type: " << tokenTypeToString(token.getType()) <<  ", token value: " << token.getValue() << "\n";
-            meaningful_tokens++;
-            token_count++;
-        }
-        
-        std::cout << "\n统计信息:\n";
-        std::cout << "================\n";
-        std::cout << "总token数: " << token_count << "\n";
-        std::cout << "有效token数: " << meaningful_tokens << "\n";
+        lexer.dump(tokens);
 
     } catch (const std::exception& e) {
         std::cerr << "错误: " << e.what() << std::endl;

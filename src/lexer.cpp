@@ -92,6 +92,12 @@ std::vector<Token> Lexer::tokenize() {
     return tokens;   
 }
 
+void Lexer::dump(const std::vector<Token>& tokens) const {
+    for (const auto& token : tokens) {
+        std::cout << "token type: " << tokenTypeToString(token.getType()) <<  ", token value: " << token.getValue() << "\n";
+    }
+}
+
 Token Lexer::readToken() {
     char c = peek();
 
