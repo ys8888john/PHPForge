@@ -52,7 +52,6 @@ private:
     bool isHexDigit(char c) const;
 
     // 创建token
-    Token makeToken(TokenType type, const std::string& value);
     Token makeToken(TokenType type, char value);
 
 private:

@@ -59,24 +59,6 @@ bool Lexer::isHexDigit(char c) const {
     return isDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 }
 
-Token Lexer::makeToken(TokenType type, const std::string& value) {
-    int line = currentLine;
-    int column = currentColumn;
-    int pos = currentPos;
-
-    // 调整位置（因为Token已经消费）
-    for (char c : value) {
-        if (c == '\n') {
-            line++;
-            column = 1;
-        } else {
-            column++;
-        }
-    }
-
-    return Token(type, value, currentLine, currentColumn, currentPos - value.length());
-}
-
 Token Lexer::makeToken(TokenType type, char value) {
     return Token(type, std::string(1, value), currentLine, currentColumn, currentPos - 1);
 }
@@ -103,7 +85,7 @@ std::vector<Token> Lexer::tokenize() {
     if (tokens.size() > 0) {
         auto lastToken = tokens[tokens.size() - 1];
         if(lastToken.getType() != TokenType::T_EOF) {
-            tokens.push_back(makeToken(TokenType::T_EOF, ""));
+            tokens.push_back(Token(TokenType::T_EOF, "", currentLine, currentColumn, currentPos));
         }
     }
 
@@ -115,7 +97,7 @@ Token Lexer::readToken() {
 
     // 文件末尾
     if (c == '\0') {
-        return makeToken(TokenType::T_EOF, "");
+        return Token(TokenType::T_EOF, "", currentLine, currentColumn, currentPos);
     }
 
     // 跳过空白字符
