@@ -3,7 +3,8 @@
 #include <fstream>
 #include <vector>
 #include <string>
-#include "lexer.h"
+#include "src/lexer/lexer.h"
+#include "src/parser/parser.h"
 
 bool readFile(const std::string& filename, std::vector<char>& buffer) {
     std::ifstream file(filename, std::ios::binary | std::ios::ate);
@@ -13,7 +14,7 @@ bool readFile(const std::string& filename, std::vector<char>& buffer) {
     }
 
     size_t size = file.tellg();
-    if (size == -1) {
+    if (size == static_cast<size_t>(-1)) {
         std::cerr << "error: can't get php file size" << std::endl;
         return false;
     }
@@ -25,6 +26,7 @@ bool readFile(const std::string& filename, std::vector<char>& buffer) {
         std::cerr << "error: can't read php file" << std::endl;
         return false;
     }
+    return true;
 }
 
 int main(int argc, char** argv){
@@ -34,13 +36,21 @@ int main(int argc, char** argv){
     }
     std::string phpFilePath = argv[1];
     std::vector<char> buffer;
-    if (readFile(phpFilePath, buffer)) {
+    if (!readFile(phpFilePath, buffer)) {
         return 1;
     }
-    try { 
-        PHPForge::Lexer lexer(buffer); 
+    try {
+        // 1. 词法分析
+        PHPForge::Lexer lexer(buffer);
         auto tokens = lexer.tokenize();
         lexer.dump(tokens);
+
+        // 2. 语法分析
+        PHPForge::Parser parser(tokens);
+        auto ast = parser.parse();
+        if (ast) {
+            ast->dump();
+        }
 
     } catch (const std::exception& e) {
         std::cerr << "错误: " << e.what() << std::endl;
