@@ -251,6 +251,11 @@ std::string Parser::parseTypeHint() {
 
 // 解析语句
 std::unique_ptr<ASTNode> Parser::parseStatement() {
+    // 跳过空白
+    while (check(TokenType::T_WHITESPACE)) {
+        consume();
+    }
+    
     if (check(TokenType::T_RETURN)) {
         return parseReturnStmt();
     } else if (check(TokenType::T_ECHO)) {
@@ -568,10 +573,11 @@ bool Parser::isStatement() {
 // 调试方法
 void Parser::debug() {
     std::cout << "当前token: " << current().getValue() << std::endl;
+
     std::cout << "下一个token: " << peek(1).getValue() << std::endl;
 }
 
-// 解析变量声明
+// 解析变量声明（PHP风格：$var = expr;）
 std::unique_ptr<ASTNode> Parser::parseVariableDecl() {
     auto token = consume();
     std::string name = token.getValue();
@@ -579,13 +585,31 @@ std::unique_ptr<ASTNode> Parser::parseVariableDecl() {
         name = name.substr(1);
     }
 
-    std::unique_ptr<ASTNode> initExpr = nullptr;
+    // 创建变量节点
+    auto varExpr = std::make_unique<VariableExpr>(name, token.getLine(), token.getColumn());
+
+    // 检查是否是赋值
     if (match(TokenType::T_ASSIGN)) {
-        initExpr = parseExpression();
+        auto valueExpr = parseExpression();
+        
+        // 创建赋值表达式：$var = value
+        auto assignExpr = std::make_unique<BinaryExpr>(
+            std::move(varExpr), "=", std::move(valueExpr),
+            token.getLine(), token.getColumn()
+        );
+        
+        consume(TokenType::T_SEMICOLON, "期望 ';' 在变量声明之后");
+        return std::make_unique<ExpressionStmt>(std::move(assignExpr), token.getLine(), token.getColumn());
     }
 
     consume(TokenType::T_SEMICOLON, "期望 ';' 在变量声明之后");
-    return nullptr;  // TODO: 实现变量声明节点
+    // 没有初始化的变量，赋值为null
+    auto nullLiteral = std::make_unique<LiteralExpr>("null", "null", token.getLine(), token.getColumn());
+    auto assignExpr = std::make_unique<BinaryExpr>(
+        std::move(varExpr), "=", std::move(nullLiteral),
+        token.getLine(), token.getColumn()
+    );
+    return std::make_unique<ExpressionStmt>(std::move(assignExpr), token.getLine(), token.getColumn());
 }
 
 // 解析表达式语句

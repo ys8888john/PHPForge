@@ -10,6 +10,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src)
 file(GLOB LEXER_SOURCES "src/lexer/*.cpp")
 file(GLOB PARSER_SOURCES "src/parser/*.cpp")
 file(GLOB AST_SOURCES "src/ast/*.cpp")
+file(GLOB INTERPRETER_SOURCES "src/interpreter/*.cpp")
 
 add_executable(PHPForge main.cpp)
 
@@ -17,6 +18,7 @@ target_sources(PHPForge PRIVATE
     ${LEXER_SOURCES}
     ${PARSER_SOURCES}
     ${AST_SOURCES}
+    ${INTERPRETER_SOURCES}
 )
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
