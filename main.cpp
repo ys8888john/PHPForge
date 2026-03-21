@@ -5,7 +5,8 @@
 #include <string>
 #include "src/lexer/lexer.h"
 #include "src/parser/parser.h"
-#include "src/interpreter/interpreter.h"
+#include "src/semantic/semanticAnalyzer.h"
+#include "src/codegen/codegen.h"
 
 bool readFile(const std::string &filename, std::vector<char> &buffer)
 {
@@ -62,12 +63,38 @@ int main(int argc, char **argv)
             return 1;
         }
         ast->dump();
-        std::cout << "\n=== 开始执行 ===\n"
-                  << std::endl;
+        std::cout << "\n=== 开始语义分析 ===\n" << std::endl;
 
-        // 3. 解释执行
-        PHPForge::Interpreter interpreter;
-        interpreter.interpret(ast.get());
+        // 3. 语义分析
+        PHPForge::SemanticAnalyzer semanticAnalyzer;
+        semanticAnalyzer.analyze(ast.get());
+        semanticAnalyzer.dumpSymbolTable();
+
+        if (semanticAnalyzer.hasErrors())
+        {
+            std::cerr << "\nSemantic analysis failed with "
+                      << semanticAnalyzer.getErrors().size() << " errors\n";
+            return 1;
+        }
+
+        std::cout << "Semantic analysis completed successfully!\n" << std::endl;
+
+        // 4. 代码生成 (LLVM IR)
+        std::cout << "=== 开始生成 LLVM IR ===\n" << std::endl;
+        PHPForge::CodeGenerator codegen;
+        codegen.generate(ast.get());
+        codegen.dumpIR();
+
+        // 输出 IR 到 .ll 文件
+        std::string irFile = phpFilePath.substr(0, phpFilePath.rfind('.')) + ".ll";
+        if (codegen.writeIRToFile(irFile)) {
+            std::cout << "\nIR written to: " << irFile << std::endl;
+        }
+
+        // 5. JIT 执行
+        std::cout << "\n=== 开始 JIT 执行 ===" << std::endl;
+        int exitCode = codegen.jit();
+        std::cout << "\n=== JIT 执行完成 (exit code: " << exitCode << ") ===\n" << std::endl;
     }
     catch (const std::exception &e)
     {

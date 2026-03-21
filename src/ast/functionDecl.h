@@ -19,6 +19,7 @@ class BlockStmt;
 
         const std::string getName() const { return name; }
         const std::string getTypeHint() const { return typeHint; }
+        const std::string getType() const { return typeHint; }
 
         void dump(int indent = 0) const override;
         std::string toString() const override;
@@ -42,7 +43,8 @@ class BlockStmt;
         const std::string& getName() const { return name; }
         const std::string& getReturnType() const { return returnType; }
         const std::vector<std::unique_ptr<Parameter>>& getParams() const { return params; }
-        const std::unique_ptr<BlockStmt>& getBody() const { return body; }
+        const std::vector<std::unique_ptr<Parameter>>& getParameters() const { return params; }
+        const BlockStmt* getBody() const { return body.get(); }
 
         void dump(int indent = 0) const override;
         std::string toString() const override;

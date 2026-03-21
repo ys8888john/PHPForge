@@ -38,7 +38,8 @@ public:
 
     const ASTNode* getCallee() const { return callee.get(); }
     const std::vector<std::unique_ptr<ASTNode>>& getArgs() const { return args; }
-    
+    const std::vector<std::unique_ptr<ASTNode>>& getArguments() const { return args; }
+
     void dump(int indent) const override;
     std::string toString() const override;
 private:
