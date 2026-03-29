@@ -18,6 +18,7 @@ enum class TokenType {
     T_FUNCTION,
     T_RETURN,
     T_ECHO,
+    T_IF,
 
     // PHP identifire
     T_IDENTIFIER, // like function name or constant name
@@ -25,11 +26,15 @@ enum class TokenType {
 
     // PHP type keywords
     T_INT,
+    T_STRING,
 
     // PHP literal
     T_NUMBER,
+    T_TRUE,
+    T_FALSE,
 
     // PHP operator
+    T_EQUAL_EQUAL,
     T_ADD,
 
     // PHP punctuation
@@ -41,6 +46,8 @@ enum class TokenType {
     T_SEMICOLON,   // ;
     T_COMMA,       // ,
     T_ASSIGN,      // =
+    T_QUOTE,       // "
+    T_SINGLE_QUOTE, // '
 
     // other
     T_WHITESPACE,
@@ -55,10 +62,15 @@ inline std::string tokenTypeToString(TokenType type) {
         {TokenType::T_FUNCTION, "T_FUNCTION"},
         {TokenType::T_RETURN, "T_RETURN"},
         {TokenType::T_ECHO, "T_ECHO"},
+        {TokenType::T_IF, "T_IF"},
         {TokenType::T_IDENTIFIER, "T_IDENTIFIER"},
         {TokenType::T_VARIABLE, "T_VARIABLE"},
         {TokenType::T_INT, "T_INT"},
+        {TokenType::T_STRING, "T_STRING"},
         {TokenType::T_NUMBER, "T_NUMBER"},
+        {TokenType::T_TRUE, "T_TRUE"},
+        {TokenType::T_FALSE, "T_FALSE"},
+        {TokenType::T_EQUAL_EQUAL, "T_EQUAL_EQUAL"},
         {TokenType::T_ADD, "T_ADD"},
         {TokenType::T_LPAREN, "T_LPAREN"},
         {TokenType::T_RPAREN, "T_RPAREN"},
@@ -68,6 +80,8 @@ inline std::string tokenTypeToString(TokenType type) {
         {TokenType::T_SEMICOLON, "T_SEMICOLON"},
         {TokenType::T_COMMA, "T_COMMA"},
         {TokenType::T_ASSIGN, "T_ASSIGN"},
+        {TokenType::T_QUOTE, "T_QUOTE"},
+        {TokenType::T_SINGLE_QUOTE, "T_SINGLE_QUOTE"},
         {TokenType::T_EOF, "T_EOF"},
         {TokenType::T_WHITESPACE, "T_WHITESPACE"},
         {TokenType::T_UNKNOWN, "T_UNKNOWN"}
@@ -82,13 +96,14 @@ inline std::string tokenTypeToString(TokenType type) {
 
 inline bool isKeyword(const std::string& str) {
     static const std::vector<std::string> keywords = {
-        "declare", "strict_types", "function", "int", "return", "echo"
+        "declare", "strict_types", "function", "int", "return", "echo", "if", "true", "false"
     };
     return std::find(keywords.begin(), keywords.end(), str) != keywords.end();
 }
 
 inline bool isOperator(TokenType type) {
     static const std::vector<TokenType> operators = {
+        TokenType::T_EQUAL_EQUAL,
         TokenType::T_ADD
     };
 
@@ -101,8 +116,12 @@ inline TokenType keywordToTokenType(const std::string& str) {
         {"strict_types", TokenType::T_STRICT_TYPES},
         {"function", TokenType::T_FUNCTION},
         {"int", TokenType::T_INT},
+        {"string", TokenType::T_STRING},
         {"return", TokenType::T_RETURN},
         {"echo", TokenType::T_ECHO},
+        {"if", TokenType::T_IF},
+        {"true", TokenType::T_TRUE},
+        {"false", TokenType::T_FALSE}
     };
 
     auto it = keywordMap.find(str);

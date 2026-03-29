@@ -53,6 +53,7 @@ private:
     std::unique_ptr<ASTNode> parseEchoStmt();
     std::unique_ptr<ASTNode> parseExpressionStmt();
     std::unique_ptr<ASTNode> parseBlockStmt();
+    std::unique_ptr<ASTNode> parseIfStmt();
 
     // 表达式
     std::unique_ptr<ASTNode> parseExpression();

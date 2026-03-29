@@ -42,6 +42,18 @@ bool CodeGenerator::writeIRToFile(const std::string& filename) const {
     return true;
 }
 
+llvm::Type* CodeGenerator::getLLVMType(const std::string& phpType) {
+    if (phpType == "int") {
+        return llvm::Type::getInt32Ty(*context);
+    } else if (phpType == "string") {
+        return llvm::Type::getInt8PtrTy(*context);
+    } else if (phpType == "bool") {
+        return llvm::Type::getInt1Ty(*context);
+    }
+
+    return nullptr;
+}
+
 // ============================================================
 // Scope management
 // ============================================================
@@ -77,11 +89,24 @@ llvm::Value* CodeGenerator::getNamedValue(const std::string& name) const {
 // ============================================================
 
 llvm::AllocaInst* CodeGenerator::createEntryBlockAlloca(llvm::Function* func,
-                                                         const std::string& varName) {
+                                                         llvm::Type* varType) {
     llvm::IRBuilder<> tmpBuilder(&func->getEntryBlock(),
                                   func->getEntryBlock().begin());
-    return tmpBuilder.CreateAlloca(llvm::Type::getInt32Ty(*context),
-                                    nullptr, varName);
+
+    if (varType == llvm::Type::getInt32Ty(*context)) {
+        return tmpBuilder.CreateAlloca(llvm::Type::getInt32Ty(*context),
+                                    nullptr);
+    }
+
+    if (varType == llvm::Type::getInt8PtrTy(*context)) {
+        return tmpBuilder.CreateAlloca(llvm::Type::getInt8PtrTy(*context),
+                                    nullptr);
+    }
+
+    if (varType == llvm::Type::getInt1Ty(*context)) {
+        return tmpBuilder.CreateAlloca(llvm::Type::getInt1Ty(*context),
+                                    nullptr);
+    }
 }
 
 llvm::Function* CodeGenerator::getPrintfFunction() {
@@ -178,12 +203,14 @@ void CodeGenerator::visitProgram(const Program* program) {
 llvm::Function* CodeGenerator::visitFunctionDecl(const FunctionDecl* node) {
     const auto& params = node->getParameters();
 
-    // Build parameter types (all int for now)
-    std::vector<llvm::Type*> paramTypes(params.size(),
-        llvm::Type::getInt32Ty(*context));
+    std::vector<llvm::Type*> paramTypes;
+    for (auto &param : params) {
+        paramTypes.push_back(getLLVMType(param->getType()));
+    }
 
+    auto* funcRetType = getLLVMType(node->getReturnType());
     auto* funcType = llvm::FunctionType::get(
-        llvm::Type::getInt32Ty(*context),
+        funcRetType,
         paramTypes,
         false
     );
@@ -213,7 +240,7 @@ llvm::Function* CodeGenerator::visitFunctionDecl(const FunctionDecl* node) {
 
     // Allocate parameters and store them
     for (auto& arg : func->args()) {
-        auto* alloca = createEntryBlockAlloca(func, arg.getName().str());
+        auto* alloca = createEntryBlockAlloca(func, arg.getType());
         builder->CreateStore(&arg, alloca);
         setNamedValue(arg.getName().str(), alloca);
     }
@@ -256,11 +283,24 @@ void CodeGenerator::visitBlockStmt(const BlockStmt* stmt) {
             case ASTNodeType::BLOCK_STMT:
                 visitBlockStmt(static_cast<const BlockStmt*>(s.get()));
                 break;
+            case ASTNodeType::IF_STMT:
+                visitIfStmt(static_cast<const IfStmt*>(s.get()));
+                break;
             default:
                 break;
         }
     }
 }
+
+void CodeGenerator::visitIfStmt(const IfStmt* stmt) {
+    llvm::Value* cond = codegenExpr(stmt->getCondition());
+
+    cond->print(llvm::errs());
+
+    // TODO: 处理then block
+    if (!cond) return;
+}
+
 
 void CodeGenerator::visitReturnStmt(const ReturnStmt* stmt) {
     if (stmt->getExpr()) {
@@ -322,6 +362,11 @@ llvm::Value* CodeGenerator::codegenLiteralExpr(const LiteralExpr* expr) {
         return llvm::ConstantInt::get(llvm::Type::getInt32Ty(*context), val, true);
     }
 
+    if (expr->getType() == "bool") {
+        bool val = expr->getValue() == "true";
+        return llvm::ConstantInt::get(llvm::Type::getInt1Ty(*context), val, true);
+    }
+
     std::cerr << "Codegen error: unsupported literal type '" << expr->getType()
               << "' with value '" << expr->getValue() << "'" << std::endl;
     return nullptr;
@@ -334,7 +379,8 @@ llvm::Value* CodeGenerator::codegenVariableExpr(const VariableExpr* expr) {
                   << "'" << std::endl;
         return nullptr;
     }
-    return builder->CreateLoad(llvm::Type::getInt32Ty(*context),
+    llvm::Type* varType = alloca->getType()->getPointerElementType();
+    return builder->CreateLoad(varType,
                                 alloca, expr->getName());
 }
 
@@ -350,12 +396,22 @@ llvm::Value* CodeGenerator::codegenBinaryExpr(const BinaryExpr* expr) {
         llvm::Value* varSlot = getNamedValue(lhs->getName());
         if (!varSlot) {
             // First assignment — create alloca in function entry block
-            varSlot = createEntryBlockAlloca(currentFunction, lhs->getName());
+            varSlot = createEntryBlockAlloca(currentFunction, varSlot->getType());
             setNamedValue(lhs->getName(), varSlot);
         }
 
         builder->CreateStore(rhsVal, varSlot);
         return rhsVal;
+    } else if (op == "==") {
+        auto* lhs = static_cast<const VariableExpr *> (expr->getLeft());
+        llvm::Value* rhsVal = codegenExpr(expr->getRight());
+        if (!rhsVal) return nullptr;
+
+        llvm::Value* varSlot = getNamedValue(lhs->getName());
+        if (!varSlot) return nullptr;
+
+        llvm::Value* lhsVal = builder->CreateLoad(rhsVal->getType(), varSlot, lhs->getName());
+        return builder->CreateICmpEQ(varSlot, rhsVal, "ifcond");
     }
 
     // Arithmetic / comparison operators

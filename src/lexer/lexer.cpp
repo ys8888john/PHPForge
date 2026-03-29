@@ -294,7 +294,23 @@ Token Lexer::readOperatorOrDelimiter() {
         case ',':
             return makeToken(TokenType::T_COMMA, c);
         case '=':
+            if (peek() == '=') {
+                advance();
+                return Token(TokenType::T_EQUAL_EQUAL, "==", startLine, startColumn, startPos);
+            }
             return makeToken(TokenType::T_ASSIGN, c);
+        case '"':
+            // TODO: 处理转义字符
+        case '\'': 
+            {
+                std::string value = "";
+                advance();
+                while (peek() != '\'' && currentPos < sourceLength) {
+                    value += advance();
+                }
+                advance();
+                return Token(TokenType::T_STRING, value, startLine, startColumn, startPos);
+            }
         case '?':
             if (peek() == '>') {
                 advance();

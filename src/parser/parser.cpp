@@ -262,6 +262,12 @@ std::unique_ptr<ASTNode> Parser::parseStatement() {
         return parseEchoStmt();
     } else if (check(TokenType::T_LBRACE)) {
         return parseBlockStmt();
+    } else if (check(TokenType::T_IF)) {
+        return parseIfStmt();
+    } else if (check(TokenType::T_SINGLE_QUOTE)) {
+        // TODO: 解析单引号字符串
+    } else if (check(TokenType::T_QUOTE)) {
+        // TODO: 解析双引号字符串
     } else {
         return parseExpressionStmt();
     }
@@ -321,7 +327,37 @@ std::unique_ptr<ASTNode> Parser::parseBlockStmt() {
     
     consume(TokenType::T_RBRACE, "期望 '}'");
     return block;
-} 
+}
+
+// 解析if语句
+std::unique_ptr<ASTNode> Parser::parseIfStmt() {
+    auto ifToken = consume();
+    int line = ifToken.getLine();
+    int column = ifToken.getColumn();
+    
+    while (check(TokenType::T_WHITESPACE)) {
+        consume();
+    }
+
+    consume(TokenType::T_LPAREN, "期望 '('");
+
+    auto condition = parseExpression();
+
+    consume(TokenType::T_RPAREN, "期望 ')'");
+
+    while(check(TokenType::T_WHITESPACE)) {
+        consume();
+    }
+
+    consume(TokenType::T_LBRACE, "期望 '{'");
+
+    auto thenBranch = parseBlockStmt();
+
+    // TODO: parse else or if else branch
+    std::unique_ptr<ASTNode> elseBranch = nullptr;
+
+    return std::make_unique<IfStmt>(std::move(condition), std::move(thenBranch), std::move(elseBranch), line, column);
+}
 
 // 解析表达式
 std::unique_ptr<ASTNode> Parser::parseExpression() {
@@ -390,11 +426,26 @@ std::unique_ptr<ASTNode> Parser::parseTerm() {
             std::move(expr), op, std::move(right),
             opToken.getLine(), opToken.getColumn()
         );
+    }
 
-        // 跳过空白
-        while (check(TokenType::T_WHITESPACE)) {
+    while (match(TokenType::T_EQUAL_EQUAL)) {
+        auto opToken = peek(-1);
+        auto op = opToken.getValue();
+
+        while(check(TokenType::T_WHITESPACE)) {
             consume();
         }
+
+        auto right = parseFactor();
+        expr = std::make_unique<BinaryExpr>(
+            std::move(expr), op, std::move(right),
+            opToken.getLine(), opToken.getColumn()
+        );
+    }
+
+    // 跳过空白
+    while (check(TokenType::T_WHITESPACE)) {
+        consume();
     }
 
     return expr;
@@ -433,6 +484,12 @@ std::unique_ptr<ASTNode> Parser::parseFactor() {
         auto expr = parseExpression();
         consume(TokenType::T_RPAREN, "期望 ')'");
         return expr;
+    } else if (match(TokenType::T_TRUE) || match(TokenType::T_FALSE)) {
+        auto token = peek(-1);
+        return std::make_unique<LiteralExpr>(token.getValue(), "bool", token.getLine(), token.getColumn());
+    } else if (match(TokenType::T_STRING)) {
+        auto token = peek(-1);
+        return std::make_unique<LiteralExpr>(token.getValue(), "string", token.getLine(), token.getColumn());
     }
     
     throw std::runtime_error(
@@ -567,6 +624,9 @@ bool Parser::isStatement() {
            check(TokenType::T_VARIABLE) ||
            check(TokenType::T_IDENTIFIER) ||
            check(TokenType::T_LBRACE) ||
+           check(TokenType::T_IF) ||
+           check(TokenType::T_SEMICOLON) ||
+           check(TokenType::T_SINGLE_QUOTE) ||
            check(TokenType::T_NUMBER);  // 数字也可以开始一个表达式语句
 }
 

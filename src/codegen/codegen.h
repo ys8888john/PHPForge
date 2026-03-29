@@ -34,6 +34,8 @@ public:
 
     const llvm::Module* getModule() const { return module.get(); }
 
+    llvm::Type* getLLVMType(const std::string& phpType);
+
 private:
     std::unique_ptr<llvm::LLVMContext> context;
     std::unique_ptr<llvm::Module> module;
@@ -49,6 +51,7 @@ private:
     void visitProgram(const Program* program);
     llvm::Function* visitFunctionDecl(const FunctionDecl* node);
     void visitBlockStmt(const BlockStmt* node);
+    void visitIfStmt(const IfStmt* node);
     void visitReturnStmt(const ReturnStmt* node);
     void visitEchoStmt(const EchoStmt* node);
     void visitExpressionStmt(const ExpressionStmt* node);
@@ -68,7 +71,7 @@ private:
 
     // LLVM helpers
     llvm::AllocaInst* createEntryBlockAlloca(llvm::Function* func,
-                                               const std::string& varName);
+                                               llvm::Type* varType);
     llvm::Function* getPrintfFunction();
     llvm::Value* createGlobalStringPtr(const std::string& str);
 };
