@@ -84,6 +84,22 @@ private:
     std::vector<std::unique_ptr<ASTNode>> statements;
 };
 
+class IfStmt : public ASTNode {
+public:
+    IfStmt(std::unique_ptr<ASTNode> condition, std::unique_ptr<ASTNode> thenBranch, std::unique_ptr<ASTNode> elseBranch, int line, int column) :
+    ASTNode(ASTNodeType::IF_STMT, line, column), condition(std::move(condition)), thenBranch(std::move(thenBranch)), elseBranch(std::move(elseBranch)){}
+
+    void dump(int indent) const override;
+    std::string toString() const override;
+
+    ASTNode* getCondition() const { return condition.get(); }
+    ASTNode* getThenBranch() const { return thenBranch.get(); }
+    ASTNode* getElseBranch() const { return elseBranch.get(); }
+private:
+    std::unique_ptr<ASTNode> condition;
+    std::unique_ptr<ASTNode> thenBranch;
+    std::unique_ptr<ASTNode> elseBranch;
+};
 } // namespace PHPForge
 
 #endif // STATEMENT_H

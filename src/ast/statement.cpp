@@ -68,4 +68,26 @@ std::string BlockStmt::toString() const {
     return result;
 }
 
+void IfStmt::dump(int indent) const {
+    std::cout << indentStr(indent) << "IfStmt:\n";
+    if (condition) {
+        condition->dump(indent + 1);
+    }
+    if (thenBranch) {
+        thenBranch->dump(indent + 1);
+    }
+    if (elseBranch) {
+        elseBranch->dump(indent + 1);
+    }
+}
+
+std::string IfStmt::toString() const {
+    std::string result = "IfStmt(condition: " + condition->toString() + ", then: " + thenBranch->toString();
+    if (elseBranch) {
+        result += ", else: " + elseBranch->toString();
+    }
+    result += ")";
+    return result;
+}   
+
 } // namespace PHPForge
