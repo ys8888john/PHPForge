@@ -68,13 +68,13 @@ void CodeGenerator::popScope() {
     }
 }
 
-void CodeGenerator::setNamedValue(const std::string& name, llvm::Value* value) {
+void CodeGenerator::setNamedValue(const std::string& name, llvm::AllocaInst* value) {
     if (!namedValues.empty()) {
         namedValues.back()[name] = value;
     }
 }
 
-llvm::Value* CodeGenerator::getNamedValue(const std::string& name) const {
+llvm::AllocaInst* CodeGenerator::getNamedValue(const std::string& name) const {
     for (auto it = namedValues.rbegin(); it != namedValues.rend(); ++it) {
         auto found = it->find(name);
         if (found != it->end()) {
@@ -263,6 +263,30 @@ llvm::Function* CodeGenerator::visitFunctionDecl(const FunctionDecl* node) {
     return func;
 }
 
+void CodeGenerator::visitStmt(const ASTNode* node) {
+    if (!node) return;
+
+    switch (node->getNodeType()) {
+        case ASTNodeType::RETURN_STMT:
+            visitReturnStmt(static_cast<const ReturnStmt*>(node));
+            break;
+        case ASTNodeType::ECHO_STMT:
+            visitEchoStmt(static_cast<const EchoStmt*>(node));
+            break;
+        case ASTNodeType::EXPRESSION_STMT:
+            visitExpressionStmt(static_cast<const ExpressionStmt*>(node));
+            break;
+        case ASTNodeType::BLOCK_STMT:
+            visitBlockStmt(static_cast<const BlockStmt*>(node));
+            break;
+        case ASTNodeType::IF_STMT:
+            visitIfStmt(static_cast<const IfStmt*>(node));
+            break;
+        default:
+            break;
+    }
+}
+
 void CodeGenerator::visitBlockStmt(const BlockStmt* stmt) {
     for (const auto& s : stmt->getStatements()) {
         // Skip if current block already has a terminator (e.g. after return)
@@ -294,11 +318,51 @@ void CodeGenerator::visitBlockStmt(const BlockStmt* stmt) {
 
 void CodeGenerator::visitIfStmt(const IfStmt* stmt) {
     llvm::Value* cond = codegenExpr(stmt->getCondition());
-
-    cond->print(llvm::errs());
-
-    // TODO: 处理then block
     if (!cond) return;
+
+    // Convert cond to i1 if needed
+    if (!cond->getType()->isIntegerTy(1)) {
+        cond = builder->CreateICmpNE(cond, llvm::ConstantInt::get(cond->getType(), 0), "ifcond");
+    }
+
+    llvm::Function* func = builder->GetInsertBlock()->getParent();
+
+    // Create blocks for then, else (optional), and merge
+    llvm::BasicBlock* thenBB = llvm::BasicBlock::Create(*context, "then", func);
+    llvm::BasicBlock* elseBB = llvm::BasicBlock::Create(*context, "else");
+    llvm::BasicBlock* mergeBB = llvm::BasicBlock::Create(*context, "merge");
+
+    bool hasElse = (stmt->getElseBranch() != nullptr);
+    if (!hasElse) {
+        // No else branch: elseBB merges directly
+        elseBB = mergeBB;
+    }
+
+    builder->CreateCondBr(cond, thenBB, elseBB);
+
+    // --- Then block ---
+    builder->SetInsertPoint(thenBB);
+    if (stmt->getThenBranch()) {
+        visitStmt(stmt->getThenBranch());
+    }
+    // If then block doesn't have a terminator, branch to merge
+    if (!builder->GetInsertBlock()->getTerminator()) {
+        builder->CreateBr(mergeBB);
+    }
+
+    // --- Else block ---
+    if (hasElse) {
+        func->getBasicBlockList().push_back(elseBB);
+        builder->SetInsertPoint(elseBB);
+        visitStmt(stmt->getElseBranch());
+        if (!builder->GetInsertBlock()->getTerminator()) {
+            builder->CreateBr(mergeBB);
+        }
+    }
+
+    // --- Merge block ---
+    func->getBasicBlockList().push_back(mergeBB);
+    builder->SetInsertPoint(mergeBB);
 }
 
 
@@ -318,13 +382,20 @@ void CodeGenerator::visitEchoStmt(const EchoStmt* stmt) {
     llvm::Value* val = codegenExpr(stmt->getExpr());
     if (!val) return;
 
-    // Extend i1 to i32 if necessary
+    auto* printfFunc = getPrintfFunction();
+
+    // String type: printf("%s\n", str)
+    if (val->getType()->isPointerTy()) {
+        auto* fmtStr = createGlobalStringPtr("%s\n");
+        builder->CreateCall(printfFunc, {fmtStr, val});
+        return;
+    }
+
+    // i1 (bool): extend to i32, then printf("%d\n", val)
     if (val->getType()->isIntegerTy(1)) {
         val = builder->CreateZExt(val, llvm::Type::getInt32Ty(*context), "boolext");
     }
 
-    // printf("%d\n", val)
-    auto* printfFunc = getPrintfFunction();
     auto* fmtStr = createGlobalStringPtr("%d\n");
     builder->CreateCall(printfFunc, {fmtStr, val});
 }
@@ -367,21 +438,25 @@ llvm::Value* CodeGenerator::codegenLiteralExpr(const LiteralExpr* expr) {
         return llvm::ConstantInt::get(llvm::Type::getInt1Ty(*context), val, true);
     }
 
+    if (expr->getType() == "string") {
+        return createGlobalStringPtr(expr->getValue());
+    }
+
     std::cerr << "Codegen error: unsupported literal type '" << expr->getType()
               << "' with value '" << expr->getValue() << "'" << std::endl;
     return nullptr;
 }
 
 llvm::Value* CodeGenerator::codegenVariableExpr(const VariableExpr* expr) {
-    llvm::Value* alloca = getNamedValue(expr->getName());
+    llvm::AllocaInst* alloca = getNamedValue(expr->getName());
     if (!alloca) {
         std::cerr << "Codegen error: unknown variable '$" << expr->getName()
                   << "'" << std::endl;
         return nullptr;
     }
-    llvm::Type* varType = alloca->getType()->getPointerElementType();
-    return builder->CreateLoad(varType,
-                                alloca, expr->getName());
+
+    llvm::Type* varType = alloca->getAllocatedType();
+    return builder->CreateLoad(varType, alloca, expr->getName());
 }
 
 llvm::Value* CodeGenerator::codegenBinaryExpr(const BinaryExpr* expr) {
@@ -393,25 +468,25 @@ llvm::Value* CodeGenerator::codegenBinaryExpr(const BinaryExpr* expr) {
         llvm::Value* rhsVal = codegenExpr(expr->getRight());
         if (!rhsVal) return nullptr;
 
-        llvm::Value* varSlot = getNamedValue(lhs->getName());
+        llvm::AllocaInst* varSlot = getNamedValue(lhs->getName());
         if (!varSlot) {
             // First assignment — create alloca in function entry block
-            varSlot = createEntryBlockAlloca(currentFunction, varSlot->getType());
+            varSlot = createEntryBlockAlloca(currentFunction, rhsVal->getType());
             setNamedValue(lhs->getName(), varSlot);
         }
 
         builder->CreateStore(rhsVal, varSlot);
         return rhsVal;
     } else if (op == "==") {
-        auto* lhs = static_cast<const VariableExpr *> (expr->getLeft());
+        auto* lhs = static_cast<const VariableExpr *>(expr->getLeft());
         llvm::Value* rhsVal = codegenExpr(expr->getRight());
         if (!rhsVal) return nullptr;
 
-        llvm::Value* varSlot = getNamedValue(lhs->getName());
+        llvm::AllocaInst* varSlot = getNamedValue(lhs->getName());
         if (!varSlot) return nullptr;
 
-        llvm::Value* lhsVal = builder->CreateLoad(rhsVal->getType(), varSlot, lhs->getName());
-        return builder->CreateICmpEQ(varSlot, rhsVal, "ifcond");
+        llvm::Value* lhsVal = builder->CreateLoad(varSlot->getAllocatedType(), varSlot, lhs->getName());
+        return builder->CreateICmpEQ(lhsVal, rhsVal, "ifcond");
     }
 
     // Arithmetic / comparison operators

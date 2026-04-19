@@ -42,7 +42,7 @@ private:
     std::unique_ptr<llvm::IRBuilder<>> builder;
 
     // Variable scope stack (stores alloca pointers)
-    std::vector<std::map<std::string, llvm::Value*>> namedValues;
+    std::vector<std::map<std::string, llvm::AllocaInst*>> namedValues;
 
     llvm::Function* currentFunction = nullptr;
     llvm::Function* printfFunc = nullptr;
@@ -50,6 +50,7 @@ private:
     // Visit methods
     void visitProgram(const Program* program);
     llvm::Function* visitFunctionDecl(const FunctionDecl* node);
+    void visitStmt(const ASTNode* node);
     void visitBlockStmt(const BlockStmt* node);
     void visitIfStmt(const IfStmt* node);
     void visitReturnStmt(const ReturnStmt* node);
@@ -66,8 +67,8 @@ private:
     // Scope helpers
     void pushScope();
     void popScope();
-    void setNamedValue(const std::string& name, llvm::Value* value);
-    llvm::Value* getNamedValue(const std::string& name) const;
+    void setNamedValue(const std::string& name, llvm::AllocaInst* value);
+    llvm::AllocaInst* getNamedValue(const std::string& name) const;
 
     // LLVM helpers
     llvm::AllocaInst* createEntryBlockAlloca(llvm::Function* func,
