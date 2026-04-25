@@ -53,6 +53,7 @@ private:
     void visitStmt(const ASTNode* node);
     void visitBlockStmt(const BlockStmt* node);
     void visitIfStmt(const IfStmt* node);
+    void visitForStmt(const ForStmt* node);
     void visitReturnStmt(const ReturnStmt* node);
     void visitEchoStmt(const EchoStmt* node);
     void visitExpressionStmt(const ExpressionStmt* node);

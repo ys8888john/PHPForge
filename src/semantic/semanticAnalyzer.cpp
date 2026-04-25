@@ -29,6 +29,12 @@ void SemanticAnalyzer::visit(const Program* program) {
             case ASTNodeType::ECHO_STMT:
                 visit(static_cast<const EchoStmt*>(stmt.get()));
                 break;
+            case ASTNodeType::IF_STMT:
+                visit(static_cast<const IfStmt*>(stmt.get()));
+                break;
+            case ASTNodeType::FOR_STMT:
+                visit(static_cast<const ForStmt*>(stmt.get()));
+                break;
             default:
                 break;
         }
@@ -117,13 +123,28 @@ void SemanticAnalyzer::visit(const EchoStmt* stmt) {
 
 void SemanticAnalyzer::visit(const ExpressionStmt* stmt) {
     if (stmt->getExpr()) {
+        // Check if this is an assignment expression, register variable if needed
+        if (stmt->getExpr()->getNodeType() == ASTNodeType::BINARY_EXPR) {
+            auto* binary = static_cast<const BinaryExpr*>(stmt->getExpr());
+            if (binary->getOp() == "=" && binary->getLeft()->getNodeType() == ASTNodeType::VARIABLE) {
+                auto* varExpr = static_cast<const VariableExpr*>(binary->getLeft());
+                auto existing = symbolTable->lookup(varExpr->getName());
+                if (!existing) {
+                    // Register new variable with inferred type
+                    std::string varType = checkExpressionType(binary->getRight());
+                    auto varSymbol = std::make_shared<VariableSymbol>(varExpr->getName(), varType);
+                    symbolTable->addSymbol(varSymbol);
+                    return;
+                }
+            }
+        }
         checkExpressionType(stmt->getExpr());
     }
 }
 
 void SemanticAnalyzer::visit(const BlockStmt* stmt) {
     symbolTable->enterScope("block");
-    
+
     for (const auto& s : stmt->getStatements()) {
         switch (s->getNodeType()) {
             case ASTNodeType::RETURN_STMT:
@@ -138,12 +159,71 @@ void SemanticAnalyzer::visit(const BlockStmt* stmt) {
             case ASTNodeType::BLOCK_STMT:
                 visit(static_cast<const BlockStmt*>(s.get()));
                 break;
+            case ASTNodeType::IF_STMT:
+                visit(static_cast<const IfStmt*>(s.get()));
+                break;
+            case ASTNodeType::FOR_STMT:
+                visit(static_cast<const ForStmt*>(s.get()));
+                break;
             default:
                 break;
         }
     }
-    
+
     symbolTable->exitScope();
+}
+
+void SemanticAnalyzer::visit(const IfStmt* stmt) {
+    if (stmt->getCondition()) {
+        checkExpressionType(stmt->getCondition());
+    }
+    if (stmt->getThenBranch()) {
+        visitStmt(stmt->getThenBranch());
+    }
+    if (stmt->getElseBranch()) {
+        visitStmt(stmt->getElseBranch());
+    }
+}
+
+void SemanticAnalyzer::visit(const ForStmt* stmt) {
+    if (stmt->getInit()) {
+        checkExpressionType(stmt->getInit());
+    }
+    if (stmt->getCondition()) {
+        checkExpressionType(stmt->getCondition());
+    }
+    if (stmt->getUpdate()) {
+        checkExpressionType(stmt->getUpdate());
+    }
+    if (stmt->getBody()) {
+        visitStmt(stmt->getBody());
+    }
+}
+
+void SemanticAnalyzer::visitStmt(const ASTNode* node) {
+    if (!node) return;
+    switch (node->getNodeType()) {
+        case ASTNodeType::RETURN_STMT:
+            visit(static_cast<const ReturnStmt*>(node));
+            break;
+        case ASTNodeType::ECHO_STMT:
+            visit(static_cast<const EchoStmt*>(node));
+            break;
+        case ASTNodeType::EXPRESSION_STMT:
+            visit(static_cast<const ExpressionStmt*>(node));
+            break;
+        case ASTNodeType::BLOCK_STMT:
+            visit(static_cast<const BlockStmt*>(node));
+            break;
+        case ASTNodeType::IF_STMT:
+            visit(static_cast<const IfStmt*>(node));
+            break;
+        case ASTNodeType::FOR_STMT:
+            visit(static_cast<const ForStmt*>(node));
+            break;
+        default:
+            break;
+    }
 }
 
 void SemanticAnalyzer::visit(const DeclareStmt* stmt) {
@@ -269,29 +349,42 @@ std::string SemanticAnalyzer::checkExpressionType(const ASTNode* expr) {
 }
 
 bool SemanticAnalyzer::isTypeCompatible(const std::string& type1, const std::string& type2) {
-    // 简化：只支持 int 类型
     if (type1 == type2) return true;
-    
+
     // PHP 是弱类型语言，允许一定程度的类型转换
-    if (type1 == "int" && type2 == "int") return true;
-    if (type1 == "int" && type2 == "unknown") return true;
-    if (type1 == "unknown" && type2 == "int") return true;
-    
+    if (type1 == "unknown" || type2 == "unknown") return true;
+
+    // int 和 bool 可互转
+    if ((type1 == "int" && type2 == "bool") || (type1 == "bool" && type2 == "int")) return true;
+
     return false;
 }
 
 std::string SemanticAnalyzer::getBinaryOpResultType(const std::string& op,
                                                    const std::string& leftType,
                                                    const std::string& rightType) {
-    // 简化：只支持加法运算
-    if (op == "+" && leftType == "int" && rightType == "int") {
+    // 算术运算符: int + int -> int
+    if ((op == "+" || op == "-" || op == "*" || op == "/" || op == "%") &&
+        leftType == "int" && rightType == "int") {
         return "int";
     }
-    
+
+    // 比较运算符: 结果为 bool
+    if ((op == "==" || op == "!=" || op == "<" || op == ">" ||
+         op == "<=" || op == ">=") &&
+        leftType == "int" && rightType == "int") {
+        return "bool";
+    }
+
+    // 赋值运算符
+    if (op == "=") {
+        return rightType;
+    }
+
     if (leftType == "unknown" || rightType == "unknown") {
         return "unknown";
     }
-    
+
     return "";
 }
 

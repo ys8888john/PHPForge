@@ -100,6 +100,31 @@ private:
     std::unique_ptr<ASTNode> thenBranch;
     std::unique_ptr<ASTNode> elseBranch;
 };
+class ForStmt : public ASTNode {
+public:
+    ForStmt(std::unique_ptr<ASTNode> init,
+            std::unique_ptr<ASTNode> condition,
+            std::unique_ptr<ASTNode> update,
+            std::unique_ptr<ASTNode> body,
+            int line, int column) :
+    ASTNode(ASTNodeType::FOR_STMT, line, column),
+    init(std::move(init)), condition(std::move(condition)),
+    update(std::move(update)), body(std::move(body)) {}
+
+    ASTNode* getInit() const { return init.get(); }
+    ASTNode* getCondition() const { return condition.get(); }
+    ASTNode* getUpdate() const { return update.get(); }
+    ASTNode* getBody() const { return body.get(); }
+
+    void dump(int indent) const override;
+    std::string toString() const override;
+private:
+    std::unique_ptr<ASTNode> init;
+    std::unique_ptr<ASTNode> condition;
+    std::unique_ptr<ASTNode> update;
+    std::unique_ptr<ASTNode> body;
+};
+
 } // namespace PHPForge
 
 #endif // STATEMENT_H

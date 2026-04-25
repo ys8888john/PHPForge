@@ -30,7 +30,7 @@ char Lexer::advance() {
 }
 
 bool Lexer::match(const std::string& str) {
-    for (int i; i < str.length(); i++) {
+    for (int i = 0; i < (int)str.length(); i++) {
         if (peek(i) != str[i]) {
             return false;
         }
@@ -279,6 +279,36 @@ Token Lexer::readOperatorOrDelimiter() {
     switch (c) {
         case '+':
             return makeToken(TokenType::T_ADD, c);
+        case '-':
+            return makeToken(TokenType::T_MINUS, c);
+        case '*':
+            return makeToken(TokenType::T_MULTIPLY, c);
+        case '/':
+            if (peek() == '/') {
+                // Line comment - handled by readToken, but just in case
+                return Token(TokenType::T_UNKNOWN, "/", startLine, startColumn, startPos);
+            }
+            return makeToken(TokenType::T_DIVIDE, c);
+        case '%':
+            return makeToken(TokenType::T_MODULO, c);
+        case '<':
+            if (peek() == '=') {
+                advance();
+                return Token(TokenType::T_LESS_EQUAL, "<=", startLine, startColumn, startPos);
+            }
+            return makeToken(TokenType::T_LESS, c);
+        case '>':
+            if (peek() == '=') {
+                advance();
+                return Token(TokenType::T_GREATER_EQUAL, ">=", startLine, startColumn, startPos);
+            }
+            return makeToken(TokenType::T_GREATER, c);
+        case '!':
+            if (peek() == '=') {
+                advance();
+                return Token(TokenType::T_NOT_EQUAL, "!=", startLine, startColumn, startPos);
+            }
+            return Token(TokenType::T_UNKNOWN, "!", startLine, startColumn, startPos);
         case '(':
             return makeToken(TokenType::T_LPAREN, c);
         case ')':

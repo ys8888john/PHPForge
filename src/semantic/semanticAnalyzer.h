@@ -48,11 +48,14 @@ public:
     void visit(const ExpressionStmt* stmt);
     void visit(const BlockStmt* stmt);
     void visit(const DeclareStmt* stmt);
+    void visit(const IfStmt* stmt);
+    void visit(const ForStmt* stmt);
     void visit(const BinaryExpr* expr);
     void visit(const CallExpr* expr);
     void visit(const LiteralExpr* expr);
     void visit(const VariableExpr* expr);
     void visit(const IdentifierExpr* expr);
+    void visitStmt(const ASTNode* node);
     
     // 符号表访问
     SymbolTable* getSymbolTable() const { return symbolTable.get(); }

@@ -88,6 +88,37 @@ std::string IfStmt::toString() const {
     }
     result += ")";
     return result;
+}
+
+// ForStmt 实现
+void ForStmt::dump(int indent) const {
+    std::cout << indentStr(indent) << "ForStmt:\n";
+    if (init) {
+        std::cout << indentStr(indent) << "  Init:\n";
+        init->dump(indent + 2);
+    }
+    if (condition) {
+        std::cout << indentStr(indent) << "  Condition:\n";
+        condition->dump(indent + 2);
+    }
+    if (update) {
+        std::cout << indentStr(indent) << "  Update:\n";
+        update->dump(indent + 2);
+    }
+    if (body) {
+        std::cout << indentStr(indent) << "  Body:\n";
+        body->dump(indent + 2);
+    }
+}
+
+std::string ForStmt::toString() const {
+    std::string result = "ForStmt(";
+    if (init) result += "init: " + init->toString();
+    if (condition) result += ", cond: " + condition->toString();
+    if (update) result += ", update: " + update->toString();
+    if (body) result += ", body: " + body->toString();
+    result += ")";
+    return result;
 }   
 
 } // namespace PHPForge

@@ -38,8 +38,6 @@ private:
     void synchronize();
 
     // 语法规则
-    // 程序规则
-    std::unique_ptr<Program> parseProgram();
     std::unique_ptr<ASTNode> parseStatement();
     std::unique_ptr<ASTNode> parseDeclaration();
 
@@ -54,14 +52,10 @@ private:
     std::unique_ptr<ASTNode> parseExpressionStmt();
     std::unique_ptr<ASTNode> parseBlockStmt();
     std::unique_ptr<ASTNode> parseIfStmt();
+    std::unique_ptr<ASTNode> parseForStmt();
 
-    // 表达式
-    std::unique_ptr<ASTNode> parseExpression();
-    std::unique_ptr<ASTNode> parseAssignment();
-    std::unique_ptr<ASTNode> parseEquality();
-    std::unique_ptr<ASTNode> parseComparison();
-    std::unique_ptr<ASTNode> parseTerm();
-    std::unique_ptr<ASTNode> parseFactor();
+    // 表达式（Pratt parsing：单入口 + 优先级表）
+    std::unique_ptr<ASTNode> parseExpression(int minPrecedence = 0);
     std::unique_ptr<ASTNode> parsePrimary();
 
     // 辅助

@@ -107,6 +107,9 @@ llvm::AllocaInst* CodeGenerator::createEntryBlockAlloca(llvm::Function* func,
         return tmpBuilder.CreateAlloca(llvm::Type::getInt1Ty(*context),
                                     nullptr);
     }
+
+    // Default: allocate for the given type
+    return tmpBuilder.CreateAlloca(varType, nullptr);
 }
 
 llvm::Function* CodeGenerator::getPrintfFunction() {
@@ -175,6 +178,12 @@ void CodeGenerator::visitProgram(const Program* program) {
                 break;
             case ASTNodeType::EXPRESSION_STMT:
                 visitExpressionStmt(static_cast<const ExpressionStmt*>(stmt.get()));
+                break;
+            case ASTNodeType::IF_STMT:
+                visitIfStmt(static_cast<const IfStmt*>(stmt.get()));
+                break;
+            case ASTNodeType::FOR_STMT:
+                visitForStmt(static_cast<const ForStmt*>(stmt.get()));
                 break;
             default:
                 break;
@@ -282,6 +291,9 @@ void CodeGenerator::visitStmt(const ASTNode* node) {
         case ASTNodeType::IF_STMT:
             visitIfStmt(static_cast<const IfStmt*>(node));
             break;
+        case ASTNodeType::FOR_STMT:
+            visitForStmt(static_cast<const ForStmt*>(node));
+            break;
         default:
             break;
     }
@@ -309,6 +321,9 @@ void CodeGenerator::visitBlockStmt(const BlockStmt* stmt) {
                 break;
             case ASTNodeType::IF_STMT:
                 visitIfStmt(static_cast<const IfStmt*>(s.get()));
+                break;
+            case ASTNodeType::FOR_STMT:
+                visitForStmt(static_cast<const ForStmt*>(s.get()));
                 break;
             default:
                 break;
@@ -363,6 +378,63 @@ void CodeGenerator::visitIfStmt(const IfStmt* stmt) {
     // --- Merge block ---
     func->getBasicBlockList().push_back(mergeBB);
     builder->SetInsertPoint(mergeBB);
+}
+
+void CodeGenerator::visitForStmt(const ForStmt* stmt) {
+    llvm::Function* func = builder->GetInsertBlock()->getParent();
+
+    // Create blocks: cond, body, update, after
+    llvm::BasicBlock* condBB = llvm::BasicBlock::Create(*context, "for.cond", func);
+    llvm::BasicBlock* bodyBB = llvm::BasicBlock::Create(*context, "for.body", func);
+    llvm::BasicBlock* updateBB = llvm::BasicBlock::Create(*context, "for.update", func);
+    llvm::BasicBlock* afterBB = llvm::BasicBlock::Create(*context, "for.after");
+
+    // Emit init
+    if (stmt->getInit()) {
+        codegenExpr(stmt->getInit());
+    }
+
+    // Branch to condition check
+    builder->CreateBr(condBB);
+
+    // --- Condition block ---
+    builder->SetInsertPoint(condBB);
+    if (stmt->getCondition()) {
+        llvm::Value* condVal = codegenExpr(stmt->getCondition());
+        if (condVal) {
+            // Convert to i1 if needed
+            if (!condVal->getType()->isIntegerTy(1)) {
+                condVal = builder->CreateICmpNE(condVal,
+                    llvm::ConstantInt::get(condVal->getType(), 0), "forcond");
+            }
+            builder->CreateCondBr(condVal, bodyBB, afterBB);
+        } else {
+            builder->CreateBr(bodyBB);
+        }
+    } else {
+        // No condition = infinite loop (but we always go to body)
+        builder->CreateBr(bodyBB);
+    }
+
+    // --- Body block ---
+    builder->SetInsertPoint(bodyBB);
+    if (stmt->getBody()) {
+        visitStmt(stmt->getBody());
+    }
+    if (!builder->GetInsertBlock()->getTerminator()) {
+        builder->CreateBr(updateBB);
+    }
+
+    // --- Update block ---
+    builder->SetInsertPoint(updateBB);
+    if (stmt->getUpdate()) {
+        codegenExpr(stmt->getUpdate());
+    }
+    builder->CreateBr(condBB);
+
+    // --- After block ---
+    func->getBasicBlockList().push_back(afterBB);
+    builder->SetInsertPoint(afterBB);
 }
 
 
@@ -477,16 +549,6 @@ llvm::Value* CodeGenerator::codegenBinaryExpr(const BinaryExpr* expr) {
 
         builder->CreateStore(rhsVal, varSlot);
         return rhsVal;
-    } else if (op == "==") {
-        auto* lhs = static_cast<const VariableExpr *>(expr->getLeft());
-        llvm::Value* rhsVal = codegenExpr(expr->getRight());
-        if (!rhsVal) return nullptr;
-
-        llvm::AllocaInst* varSlot = getNamedValue(lhs->getName());
-        if (!varSlot) return nullptr;
-
-        llvm::Value* lhsVal = builder->CreateLoad(varSlot->getAllocatedType(), varSlot, lhs->getName());
-        return builder->CreateICmpEQ(lhsVal, rhsVal, "ifcond");
     }
 
     // Arithmetic / comparison operators

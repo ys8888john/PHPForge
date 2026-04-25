@@ -20,56 +20,43 @@ Parser::Parser(const std::vector<Token>& tokens)
 // 主解析方法
 std::unique_ptr<Program> Parser::parse() {
     try {
-        return parseProgram();
+        auto program = std::make_unique<Program>();
+        while (check(TokenType::T_OPEN_TAG)) {
+            consume();
+        }
+
+        while (!isAtEnd()) {
+            if (check(TokenType::T_WHITESPACE)) {
+                consume();
+                continue;
+            }
+
+            try {
+                if (isDeclaration()) {
+                    auto decl = parseDeclaration();
+                    if (decl) program->addStatement(std::move(decl));
+                } else if (isStatement()) {
+                    auto stmt = parseStatement();
+                    if (stmt) program->addStatement(std::move(stmt));
+                } else {
+                    throw std::runtime_error(
+                        "Unexpected token '" + peek().getValue() + "' at line " +
+                        std::to_string(peek().getLine()) + ", column " +
+                        std::to_string(peek().getColumn())
+                    );
+                }
+            } catch (const std::exception& e) {
+                std::cerr << "Error: " << e.what() << std::endl;
+                synchronize();
+                while (check(TokenType::T_WHITESPACE)) { consume(); }
+            }
+        }
+
+        return program;
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
         return nullptr;
     }
-}
-
-// 解析程序
-std::unique_ptr<Program> Parser::parseProgram() {
-    auto program = std::make_unique<Program>();
-    while (check(TokenType::T_OPEN_TAG)) {
-        consume();
-    }
-
-    // 解析所有声明和语句
-    while (!isAtEnd()) {
-        if (check(TokenType::T_WHITESPACE)) {
-            consume();
-            continue;
-        }
-
-        try {
-            if (isDeclaration()) {
-                auto decl = parseDeclaration();
-                if (decl) {
-                    program->addStatement(std::move(decl));
-                }
-            } else if (isStatement()) {
-                auto stmt = parseStatement();
-                if (stmt) {
-                    program->addStatement(std::move(stmt));
-                }
-            } else {
-                throw std::runtime_error(
-                    "Unexpected token '" + peek().getValue() + "' at line " +
-                    std::to_string(peek().getLine()) + ", column " +
-                    std::to_string(peek().getColumn())
-                );
-            }
-        } catch (const std::exception& e) {
-            std::cerr << "Error: " << e.what() << std::endl;
-            synchronize();
-            // 跳过空白直到找到下一个声明或语句
-            while (check(TokenType::T_WHITESPACE)) {
-                consume();
-            }
-        }
-    }
-
-    return program;
 }
 
 // 解析声明
@@ -264,13 +251,18 @@ std::unique_ptr<ASTNode> Parser::parseStatement() {
         return parseBlockStmt();
     } else if (check(TokenType::T_IF)) {
         return parseIfStmt();
+    } else if (check(TokenType::T_FOR)) {
+        return parseForStmt();
     } else if (check(TokenType::T_SINGLE_QUOTE)) {
         // TODO: 解析单引号字符串
+        return nullptr;
     } else if (check(TokenType::T_QUOTE)) {
         // TODO: 解析双引号字符串
+        return nullptr;
     } else {
         return parseExpressionStmt();
     }
+    return nullptr;
 }
 
 // 解析返回语句
@@ -359,139 +351,135 @@ std::unique_ptr<ASTNode> Parser::parseIfStmt() {
     return std::make_unique<IfStmt>(std::move(condition), std::move(thenBranch), std::move(elseBranch), line, column);
 }
 
-// 解析表达式
-std::unique_ptr<ASTNode> Parser::parseExpression() {
-    return parseAssignment();
+// 解析for语句
+std::unique_ptr<ASTNode> Parser::parseForStmt() {
+    auto forToken = consume(); // consume T_FOR
+    int line = forToken.getLine();
+    int column = forToken.getColumn();
+
+    while (check(TokenType::T_WHITESPACE)) { consume(); }
+    consume(TokenType::T_LPAREN, "期望 '(' 在 for 之后");
+
+    // Init
+    while (check(TokenType::T_WHITESPACE)) { consume(); }
+    std::unique_ptr<ASTNode> init = nullptr;
+    if (!check(TokenType::T_SEMICOLON)) {
+        init = parseExpression();
+    }
+    consume(TokenType::T_SEMICOLON, "期望 ';' 在 for 初始化之后");
+
+    // Condition
+    while (check(TokenType::T_WHITESPACE)) { consume(); }
+    std::unique_ptr<ASTNode> condition = nullptr;
+    if (!check(TokenType::T_SEMICOLON)) {
+        condition = parseExpression();
+    }
+    consume(TokenType::T_SEMICOLON, "期望 ';' 在 for 条件之后");
+
+    // Update
+    while (check(TokenType::T_WHITESPACE)) { consume(); }
+    std::unique_ptr<ASTNode> update = nullptr;
+    if (!check(TokenType::T_RPAREN)) {
+        update = parseExpression();
+    }
+    consume(TokenType::T_RPAREN, "期望 ')' 在 for 之后");
+
+    while (check(TokenType::T_WHITESPACE)) { consume(); }
+    consume(TokenType::T_LBRACE, "期望 '{' 在 for 之后");
+
+    auto body = parseBlockStmt();
+
+    return std::make_unique<ForStmt>(std::move(init), std::move(condition), std::move(update), std::move(body), line, column);
 }
 
-// 解析赋值
-std::unique_ptr<ASTNode> Parser::parseAssignment() {
-    auto expr = parseEquality();
-
-    // 跳过空白
-    while (check(TokenType::T_WHITESPACE)) {
-        consume();
-    }
-
-    if (match(TokenType::T_ASSIGN)) {
-        auto opToken = peek(-1);
-
-        // 跳过空白
-        while (check(TokenType::T_WHITESPACE)) {
-            consume();
+// ============ 优先级表（数值越大优先级越高）============
+namespace {
+    // 前缀token没有左结合性，返回0
+    inline int getPrecedence(TokenType type) {
+        switch (type) {
+            case TokenType::T_ASSIGN:       return 1;   // =
+            case TokenType::T_EQUAL_EQUAL:   // ==
+            case TokenType::T_NOT_EQUAL:     return 3;   // !=
+            case TokenType::T_LESS:          // <
+            case TokenType::T_GREATER:       // >
+            case TokenType::T_LESS_EQUAL:    // <=
+            case TokenType::T_GREATER_EQUAL: return 4;   // >=
+            case TokenType::T_ADD:           // +
+            case TokenType::T_MINUS:         return 5;
+            default: return 0;
         }
+    }
+}
 
-        auto value = parseExpression();
+// 解析表达式（Pratt Parser：单函数 + 优先级爬升）
+std::unique_ptr<ASTNode> Parser::parseExpression(int minPrecedence) {
+    auto left = parsePrimary();
 
-        expr = std::make_unique<BinaryExpr>(
-            std::move(expr), "=", std::move(value),
+    while (!isAtEnd()) {
+        while (check(TokenType::T_WHITESPACE)) { consume(); }
+
+        int prec = getPrecedence(current().getType());
+        if (prec <= minPrecedence) break;
+
+        auto opToken = consume();
+        std::string op = opToken.getValue();
+
+        while (check(TokenType::T_WHITESPACE)) { consume(); }
+
+        auto right = parseExpression(prec);
+
+        left = std::make_unique<BinaryExpr>(
+            std::move(left), op, std::move(right),
             opToken.getLine(), opToken.getColumn()
         );
     }
 
-    return expr;
+    return left;
 }
 
-// 解析相等性
-std::unique_ptr<ASTNode> Parser::parseEquality() {
-    return parseComparison();
-}
+// 解析基本表达式（原子/前缀）
+std::unique_ptr<ASTNode> Parser::parsePrimary() {
+    while (check(TokenType::T_WHITESPACE)) { consume(); }
 
-// 解析比较
-std::unique_ptr<ASTNode> Parser::parseComparison() {
-    return parseTerm();
-}
-
-// 解析项
-std::unique_ptr<ASTNode> Parser::parseTerm() {
-    auto expr = parseFactor();
-
-    // 跳过空白
-    while (check(TokenType::T_WHITESPACE)) {
-        consume();
-    }
-
-    while (match(TokenType::T_ADD)) {
-        auto opToken = peek(-1);
-        auto op = opToken.getValue();
-
-        // 跳过空白
-        while (check(TokenType::T_WHITESPACE)) {
-            consume();
-        }
-
-        auto right = parseFactor();
-
-        expr = std::make_unique<BinaryExpr>(
-            std::move(expr), op, std::move(right),
-            opToken.getLine(), opToken.getColumn()
-        );
-    }
-
-    while (match(TokenType::T_EQUAL_EQUAL)) {
-        auto opToken = peek(-1);
-        auto op = opToken.getValue();
-
-        while(check(TokenType::T_WHITESPACE)) {
-            consume();
-        }
-
-        auto right = parseFactor();
-        expr = std::make_unique<BinaryExpr>(
-            std::move(expr), op, std::move(right),
-            opToken.getLine(), opToken.getColumn()
-        );
-    }
-
-    // 跳过空白
-    while (check(TokenType::T_WHITESPACE)) {
-        consume();
-    }
-
-    return expr;
-}
-
-// 解析基本表达式
-std::unique_ptr<ASTNode> Parser::parseFactor() {
     if (match(TokenType::T_NUMBER)) {
         auto token = peek(-1);
         return std::make_unique<LiteralExpr>(
             token.getValue(), "int",
             token.getLine(), token.getColumn()
         );
-    } else if (match(TokenType::T_VARIABLE)) {
+    }
+    if (match(TokenType::T_VARIABLE)) {
         auto token = peek(-1);
         std::string name = token.getValue();
-        if (!name.empty() && name[0] == '$') {
-            name = name.substr(1);
-        }
+        if (!name.empty() && name[0] == '$') { name = name.substr(1); }
         return std::make_unique<VariableExpr>(
             name, token.getLine(), token.getColumn()
         );
-    } else if (match(TokenType::T_IDENTIFIER)) {
+    }
+    if (match(TokenType::T_IDENTIFIER)) {
         auto token = peek(-1);
         auto identifier = std::make_unique<IdentifierExpr>(
             token.getValue(), token.getLine(), token.getColumn()
         );
-
-        // 检查是否是函数调用
         if (check(TokenType::T_LPAREN)) {
             return parseCall(std::move(identifier));
         }
-
         return identifier;
-    } else if (match(TokenType::T_LPAREN)) {
+    }
+    if (match(TokenType::T_LPAREN)) {
         auto expr = parseExpression();
         consume(TokenType::T_RPAREN, "期望 ')'");
         return expr;
-    } else if (match(TokenType::T_TRUE) || match(TokenType::T_FALSE)) {
+    }
+    if (match(TokenType::T_TRUE) || match(TokenType::T_FALSE)) {
         auto token = peek(-1);
         return std::make_unique<LiteralExpr>(token.getValue(), "bool", token.getLine(), token.getColumn());
-    } else if (match(TokenType::T_STRING)) {
+    }
+    if (match(TokenType::T_STRING)) {
         auto token = peek(-1);
         return std::make_unique<LiteralExpr>(token.getValue(), "string", token.getLine(), token.getColumn());
     }
-    
+
     throw std::runtime_error(
         "期望表达式" +
         std::to_string(current().getLine()) + ":" + std::to_string(current().getColumn())
@@ -625,6 +613,7 @@ bool Parser::isStatement() {
            check(TokenType::T_IDENTIFIER) ||
            check(TokenType::T_LBRACE) ||
            check(TokenType::T_IF) ||
+           check(TokenType::T_FOR) ||
            check(TokenType::T_SEMICOLON) ||
            check(TokenType::T_SINGLE_QUOTE) ||
            check(TokenType::T_NUMBER);  // 数字也可以开始一个表达式语句

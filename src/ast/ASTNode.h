@@ -23,6 +23,7 @@ enum class ASTNodeType {
     ECHO_STMT,
     BLOCK_STMT,
     IF_STMT,
+    FOR_STMT,
 
     // 表达式
     BINARY_EXPR,
