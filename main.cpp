@@ -85,13 +85,18 @@ int main(int argc, char **argv)
         codegen.generate(ast.get());
         codegen.dumpIR();
 
+        // 5. 优化 (mem2reg 等)
+        std::cout << "\n=== 开始优化 IR ===\n" << std::endl;
+        codegen.optimize();
+        codegen.dumpIR();
+
         // 输出 IR 到 .ll 文件
         std::string irFile = phpFilePath.substr(0, phpFilePath.rfind('.')) + ".ll";
         if (codegen.writeIRToFile(irFile)) {
             std::cout << "\nIR written to: " << irFile << std::endl;
         }
 
-        // 5. JIT 执行
+        // 6. JIT 执行
         std::cout << "\n=== 开始 JIT 执行 ===" << std::endl;
         int exitCode = codegen.jit();
         std::cout << "\n=== JIT 执行完成 (exit code: " << exitCode << ") ===\n" << std::endl;

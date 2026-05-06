@@ -6,7 +6,6 @@ set(CMAKE_CXX_STANDARD 17)
 # ============================================================
 # LLVM 15
 # ============================================================
-set(LLVM_DIR "/usr/local/clang-15/lib/cmake/llvm")
 find_package(LLVM 15 REQUIRED CONFIG)
 
 message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
@@ -44,7 +43,7 @@ if (NOT MSVC)
 endif()
 
 # Use llvm_config to resolve components + system libs automatically
-llvm_config(PHPForge core native orcjit)
+llvm_config(PHPForge core native orcjit passes)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)

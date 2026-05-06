@@ -7,6 +7,13 @@
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/IR/Constants.h"
+#include "llvm/Passes/PassBuilder.h"
+#include "llvm/Passes/StandardInstrumentations.h"
+#include "StrengthReductionPass.h"
+#include "llvm/Transforms/Utils/Mem2Reg.h"
+#include "llvm/Transforms/InstCombine/InstCombine.h"
+#include "llvm/Transforms/Scalar/GVN.h"
+#include "llvm/Transforms/Scalar/SimplifyCFG.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
 #include "llvm/ExecutionEngine/Orc/ThreadSafeModule.h"
 #include "llvm/ExecutionEngine/Orc/EPCDynamicLibrarySearchGenerator.h"
@@ -25,6 +32,43 @@ CodeGenerator::~CodeGenerator() = default;
 
 void CodeGenerator::generate(const Program* program) {
     visitProgram(program);
+}
+
+void CodeGenerator::optimize() {
+    if (!module) {
+        std::cerr << "Optimize error: module not generated" << std::endl;
+        return;
+    }
+
+    llvm::PassBuilder pb;
+
+    llvm::LoopAnalysisManager lam;
+    llvm::FunctionAnalysisManager fam;
+    llvm::CGSCCAnalysisManager cgam;
+    llvm::ModuleAnalysisManager mam;
+
+    // Register all analyses
+    pb.registerModuleAnalyses(mam);
+    pb.registerCGSCCAnalyses(cgam);
+    pb.registerFunctionAnalyses(fam);
+    pb.registerLoopAnalyses(lam);
+    pb.crossRegisterProxies(lam, fam, cgam, mam);
+
+    // Build function-level pass pipeline: mem2reg + strengthreduction + instcombine + simplifycfg
+    llvm::FunctionPassManager fpm;
+    fpm.addPass(llvm::PromotePass());              // mem2reg: alloca → SSA
+    fpm.addPass(PHPForge::StrengthReductionPass());// 乘法强度消减: x*2^n → x<<n
+    fpm.addPass(llvm::InstCombinePass());          // 指令化简
+    fpm.addPass(llvm::GVNPass());                  // 全局值编号
+    fpm.addPass(llvm::SimplifyCFGPass());          // 简化控制流图
+
+    // Wrap into module pass
+    llvm::ModulePassManager mpm;
+    mpm.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(fpm)));
+
+    mpm.run(*module, mam);
+
+    std::cout << "=== 优化完成 (mem2reg + strengthreduction + instcombine + gvn + simplifycfg) ===" << std::endl;
 }
 
 void CodeGenerator::dumpIR() const {

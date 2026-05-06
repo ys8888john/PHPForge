@@ -28,6 +28,7 @@ public:
     ~CodeGenerator();
 
     void generate(const Program* program);
+    void optimize();  // Run optimization passes (mem2reg, etc.)
     void dumpIR() const;
     bool writeIRToFile(const std::string& filename) const;
     int jit(); // JIT execute, consumes module

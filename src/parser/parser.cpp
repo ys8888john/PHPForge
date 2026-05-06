@@ -406,6 +406,9 @@ namespace {
             case TokenType::T_GREATER_EQUAL: return 4;   // >=
             case TokenType::T_ADD:           // +
             case TokenType::T_MINUS:         return 5;
+            case TokenType::T_MULTIPLY:     // *
+            case TokenType::T_DIVIDE:        // /
+            case TokenType::T_MODULO:        return 6;   // %
             default: return 0;
         }
     }
